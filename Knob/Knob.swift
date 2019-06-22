@@ -6,6 +6,7 @@
 //  Copyright © 2015 Chris Gulley. All rights reserved.
 //
 
+import Foundation
 import UIKit
 
 /**
@@ -22,7 +23,7 @@ extension CGVector {
      */
     func angleFromVector(vector: CGVector) -> Double {
         let angle = Double(atan2(dy, dx) - atan2(vector.dy, vector.dx))
-        return angle > 0 ? angle : angle + 2 * M_PI
+        return angle > 0 ? angle : angle + 2 * Double.pi
     }
 }
 
@@ -63,7 +64,8 @@ extension CATransaction {
  * values increasing as the knob is rotated clockwise. The value resets from 2 * PI to 0 as
  * the user rotates the knob through the 12 o'clock position.
  */
-public class Knob: UIControl {
+public class KnobControl: UIControl {
+    private let shapeLayer = CAShapeLayer()
     private let indicatorLayer = CAShapeLayer()
     private let lineWidth = CGFloat(1)
     private var lastVector = CGVector.zero
@@ -77,7 +79,7 @@ public class Knob: UIControl {
             return angle
         }
         set {
-            angle = newValue % (M_PI * 2)
+            angle = newValue.truncatingRemainder(dividingBy: Double.pi * 2)
             updateLayer()
         }
     }
@@ -90,7 +92,7 @@ public class Knob: UIControl {
         }
     }
     
-    override public var enabled: Bool {
+    override public var isEnabled: Bool {
         didSet {
             CATransaction.doWithNoAnimation {
                 self.updateLayer()
@@ -109,7 +111,7 @@ public class Knob: UIControl {
     private var knobBackgroundColor: UIColor?
     override public var backgroundColor: UIColor? {
         get {
-           return knobBackgroundColor
+            return knobBackgroundColor
         }
         
         set {
@@ -120,24 +122,34 @@ public class Knob: UIControl {
     
     override init(frame: CGRect) {
         super.init(frame: frame)
+        addShapeLayer()
         updateLayer()
     }
     
     required public init?(coder decoder: NSCoder) {
         super.init(coder: decoder)
+        addShapeLayer()
         updateLayer()
     }
     
+    private func addShapeLayer() {
+        layer.addSublayer(shapeLayer)
+    }
+    
+    public override func layoutSubviews() {
+        super.layoutSubviews()
+        shapeLayer.frame = self.bounds
+    }
+    
     private func updateLayer() {
-        let shapeLayer = layer as! CAShapeLayer
         if let color = knobBackgroundColor {
-            shapeLayer.fillColor = enabled ? color.CGColor : (color.disabledColor().CGColor)
+            shapeLayer.fillColor = isEnabled ? color.cgColor : (color.disabledColor().cgColor)
         }
         else {
-            shapeLayer.fillColor = UIColor.clearColor().CGColor
+            shapeLayer.fillColor = UIColor.clear.cgColor
         }
-        shapeLayer.backgroundColor = UIColor.clearColor().CGColor
-        shapeLayer.strokeColor = enabled ? tintColor.CGColor : (tintColor.disabledColor().CGColor)
+        shapeLayer.backgroundColor = UIColor.clear.cgColor
+        shapeLayer.strokeColor = isEnabled ? tintColor.cgColor : (tintColor.disabledColor().cgColor)
         shapeLayer.lineWidth = lineWidth
         
         // Adjust drawing rectangle for line width
@@ -151,7 +163,7 @@ public class Knob: UIControl {
             dy += (bounds.height - bounds.width) / 2
         }
         let ovalRect = bounds.insetBy(dx: dx, dy: dy)
-        shapeLayer.path = UIBezierPath(ovalInRect: ovalRect).CGPath
+        shapeLayer.path = UIBezierPath(ovalIn: ovalRect).cgPath
         
         // Adjust for line width to keep tick mark inside circle
         let shortSide = min(bounds.width, bounds.height)
@@ -162,7 +174,7 @@ public class Knob: UIControl {
         indicatorLayer.position = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
         indicatorLayer.lineWidth = shapeLayer.lineWidth
         indicatorLayer.strokeColor = shapeLayer.strokeColor
-        indicatorLayer.fillColor = UIColor.clearColor().CGColor
+        indicatorLayer.fillColor = UIColor.clear.cgColor
         
         shapeLayer.addSublayer(indicatorLayer)
     }
@@ -175,41 +187,37 @@ public class Knob: UIControl {
         
         // Adjust the angle to be in the counterclockwise direction from the positive
         // x-axis to accomodate the standard parametric equations for a circle used below.
-        let t = 5 / 2 * M_PI - angle
+        let t = 5 / 2 * Double.pi - angle
         let center = indicatorLayer.bounds.center
         
         let x1 = center.x + (indicatorLayer.bounds.width / 2) * CGFloat(cos(t))
         let y1 = center.y - (indicatorLayer.bounds.height / 2) * CGFloat(sin(t))
-        linePath.moveToPoint(CGPoint(x:x1, y:y1))
-
+        linePath.move(to: CGPoint(x:x1, y:y1))
+        
         let x2 = center.x + (indicatorLayer.bounds.width / 3) * CGFloat(cos(t))
         let y2 = center.y - (indicatorLayer.bounds.height / 3) * CGFloat(sin(t))
-        linePath.addLineToPoint(CGPoint(x:x2, y:y2))
+        linePath.addLine(to: CGPoint(x:x2, y:y2))
         
-        indicatorLayer.path = linePath.CGPath
+        indicatorLayer.path = linePath.cgPath
     }
     
-    override public func beginTrackingWithTouch(touch: UITouch, withEvent event: UIEvent?) -> Bool {
-        lastVector = touch.locationInView(self) - bounds.center
+    override public func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        lastVector = touch.location(in: self) - bounds.center
         return true
     }
     
-    override public func continueTrackingWithTouch(touch: UITouch, withEvent event: UIEvent?) -> Bool {
+    override public func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
         // Calculate vector from center to touch.
-        let vector = touch.locationInView(self) - bounds.center
+        let vector = touch.location(in: self) - bounds.center
         
         // Add angular difference to our current value.
-        angle = (angle + vector.angleFromVector(lastVector)) % (2 * M_PI)
+        angle = (angle + vector.angleFromVector(vector: lastVector)).truncatingRemainder(dividingBy: 2 * Double.pi)
         
         lastVector = vector
         updateIndicator()
         
-        sendActionsForControlEvents(UIControlEvents.ValueChanged)
+        sendActions(for: UIControlEvents.valueChanged)
         
         return true
-    }
-    
-    public override class func layerClass() -> AnyClass {
-        return CAShapeLayer.self
     }
 }
